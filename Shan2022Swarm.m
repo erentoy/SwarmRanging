@@ -57,6 +57,14 @@ pRange = 0.05:0.05:0.5;
 T = 10000;
 mse=zeros(1, length(pRange)); % mse distance error
 transmitting=zeros(N,T);
+% The clock drift error of the Qorvo DW1000 module according to the
+%datasheet, the module's integrated clock has a typical accuracy of
+%±10 ppm (parts per million) at 25°C, which translates to about %±0.01%
+%deviation from the ideal clock frequency.
+
+% clock drift, a random value from the normal distribution with 0 mean
+% 10 ppm variance. approx 1 nanoseonds missmatch
+clockDrift = (normrnd(0,10e-6,[1,5]));
 %% farkli p degerleri icin simulasyon
 for pIndex=1:length(pRange)
     p = pRange(pIndex);
@@ -65,6 +73,7 @@ for pIndex=1:length(pRange)
     lossCntr = 0;
     distCalculationCntr = 0;
     distanceError = 0;
+
     %% run
     for t=1:T
         transmitting(:,t)=rand(N,1)<p; %ileti yapan dugumler
@@ -118,7 +127,7 @@ for pIndex=1:length(pRange)
                     % if empty
                     nodes{n}.timeStamps{ii}.sourceId = idx;
                     nodes{n}.timeStamps{ii}.seqNum = nodes{idx}.seqNum;
-                    nodes{n}.timeStamps{ii}.recTime =  t + flight_times(idx, n); % + flight time
+                    nodes{n}.timeStamps{ii}.recTime = t + flight_times(idx, n); % maybe mean?
                     break;
                 end
             end
@@ -174,7 +183,10 @@ for pIndex=1:length(pRange)
                 bd = nodes{n}.table{idx}.Rf - nodes{n}.table{idx}.Tr;
                 ap = nodes{n}.table{idx}.Tf - nodes{n}.table{idx}.Rr;
                 
-                tof_e = (ad * bd - ap * bp) / (ad + bd + ap + bp);
+                tof = (ad * bd - ap * bp) / (ad + bd + ap + bp);
+                e1 = clockDrift(n);
+                e2 = clockDrift(idx);
+                tof_e = (e1 + e2 + 2 * e1 * e2) / (2 + e1 + e2) * tof + tof;
                 nodes{n}.table{idx}.distance = tof_e * 3e-1;
                 
                 distanceError = distanceError + (nodes{n}.table{idx}.distance - distance(n,idx))^2;
@@ -220,6 +232,7 @@ for pIndex=1:length(pRange)
     fprintf("Percantage of time that is avaliable for succesfull packet transmisson %.2f\n",100-100*(collisionCntr + idleCntr + lossCntr)/T );
     fprintf("Number of distance calculation made is %d\n", distCalculationCntr);
     fprintf("Average mean square error is %.2f meter (%.2f cm) \n\n", meanError, meanError * 100);
+    clockDrift
     
 end
 
